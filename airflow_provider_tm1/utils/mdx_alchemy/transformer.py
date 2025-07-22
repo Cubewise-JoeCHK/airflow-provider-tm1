@@ -28,6 +28,12 @@ parse_tuple_to_data = lambda x: {i[0]: i[1] for i in x if isinstance(i, tuple)}
 
 
 class MDXTransformer(lark.Transformer):
+    """
+    This transformer is used to transform the parsed MDX query into an MdxBuilder object.
+    
+    #! This transformer is expecting to transform the simple MDX query, if the query is complex, it will not work as expected. or error out. 
+    #! It is not a complete implementation of the MDX query language, but it is enough to handle the simple queries.
+    """
 
     def string(self, item):
         return item[1].value
