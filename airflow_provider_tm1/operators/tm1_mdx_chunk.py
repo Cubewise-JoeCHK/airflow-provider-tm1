@@ -19,9 +19,7 @@ class TM1MDXChunkOperator(BaseOperator):
     :param skip_chunk_process: If True, skips processing of chunks and only returns the MDX query.
     """
     
-    hook_name = 'tm1'
     default_conn_name = 'tm1_default'
-    conn_type = 'tm1'
     ui_color = '#BDDDEF'
     ui_fgcolor = '#434b53'
     
@@ -39,6 +37,13 @@ class TM1MDXChunkOperator(BaseOperator):
         self.tm1_conn_id = tm1_conn_id
         self.skip_chunk_process = skip_chunk_process
     
-    def execute(self, context: Context) -> None: 
-        ...
-    ...
+    def execute(self, context: Context): 
+        from airflow_provider_tm1.utils.mdx_alchemy.optimizer import chunk_query
+        from airflow_provider_tm1.utils.mdx_alchemy import mdx_to_mdx_builder
+        hook = TM1Hook(tm1_conn_id=self.tm1_conn_id)
+        if self.skip_chunk_process:
+            self.log.info("Skipping chunk processing. Returning MDX query.")
+            return [mdx_to_mdx_builder(self.mdx).to_mdx()]
+        with hook.get_conn() as tm1:
+            return chunk_query(tm1, self.mdx, self.chunk_size)
+
