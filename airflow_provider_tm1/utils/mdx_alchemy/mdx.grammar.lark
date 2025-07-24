@@ -1,0 +1,116 @@
+start: mdx_builder
+// grammar design language :
+// this is a grammar for MDX (Multidimensional Expressions) queries.
+
+// token
+SELECT:                 "SELECT"
+FROM:                   "FROM"
+WHERE:                  "WHERE"
+NON:                    "NON"
+EMPTY:                  "EMPTY"
+ON:                     "ON"
+ROWS:                   "ROWS" | "1"
+COLUMNS:                "COLUMNS" | "0"
+RECURSIVE:              "RECURSIVE"i
+ALL:                    "All"i
+
+
+IDENTIFIER:             /[^^\[\]\{]+/
+STRING:                 /([^"][^"]*)|([^'][^']*)/
+NUMERIC:                /[0-9]+(\.[0-9]+)?/
+
+LBRACE:                 "{"
+RBRACE:                 "}"
+LBRACKET:               "["
+RBRACKET:               "]"
+RPAREN:                 ")"
+LPAREN:                 "("
+COMMA:                  ","
+DOT:                    "."
+DOUBLE_QUOTE:            "\""
+SINGLE_QUOTE:            "'"
+STAR:                   "*"
+PLUS:                   "+"
+FLAG:                   "^"
+COLUN:                  ":"
+
+
+// atomic elements
+string:                 (SINGLE_QUOTE STRING SINGLE_QUOTE) | (DOUBLE_QUOTE STRING DOUBLE_QUOTE)
+name:                   LBRACKET IDENTIFIER RBRACKET | LBRACKET (consolidation FLAG)* child RBRACKET
+non_empty:              NON EMPTY
+cube_source:            name
+
+dimension:              name
+hierarchy:              name
+element:                name
+attribute:              name
+consolidation:          IDENTIFIER
+child:                  IDENTIFIER
+
+
+// mdx builder
+mdx_builder:            SELECT mdx_axis_row (COMMA mdx_axis_column)? FROM cube_source where?
+                        | SELECT mdx_axis_column (COMMA mdx_axis_row)? FROM cube_source where?
+
+set_mdx_builder:        (mdx_set)
+
+// mdxpy grammar:
+mdx_axis_row:           non_empty? ( mdx_set ) (STAR ( mdx_set ) )* dimension_properties? ON (ROWS)
+mdx_axis_column:        non_empty? ( mdx_set ) (STAR ( mdx_set ) )* dimension_properties? ON (COLUMNS)
+where:                  WHERE LPAREN mdx_tuple RPAREN
+dimension_properties:   "DIMENSION"i "PROPERTIES"i "MEMBER_NAME"i | "PROPERTIES"i member
+
+
+mdx_tuple:              LBRACE member (COMMA member)* RBRACE | member (COMMA member)* | LPAREN member (COMMA member)* RPAREN
+mdx_set:                mdx_hierarchy_set | LBRACE mdx_hierarchy_set RBRACE
+cross_join_mdx_set:     mdx_set   (STAR mdx_set)*
+multi_union_mdx_set:    mdx_set   (PLUS mdx_set)*
+members:                member    (COMMA member)*
+member:                 dimension (DOT hierarchy)? DOT element | dimension (DOT hierarchy)? DOT "CurrentMember"i | LBRACE dimension (DOT hierarchy)? DOT element RBRACE
+
+
+
+// properties (not support yet)
+mdx_properties_tuple:   dimension_property
+dimension_property:     dimension DOT hierarchy DOT attribute | dimension DOT attribute
+
+
+mdx_hierarchy_set:      elements_hierarchy_set | tm1_subset_all_hierarchy_set | all_members_hierarchy_set | drill_down_member | tm1_subset_to_set | tm1_filter_by_pattern | drill_up_member | children_hierarchy_set | tm1_filter_by_level | except_hierarchy_set | union_hierarchy_set | range_hierarchy_set | tm1_drill_down_member | tm1_sort | default_member_hierarchy_set | order_by_cell_value_hierarchy_set | descendants_hierarchy_set |  LBRACE mdx_hierarchy_set RBRACE
+
+// mdxhierarchySet
+elements_hierarchy_set:        member    (COMMA member)*
+tm1_subset_all_hierarchy_set:  "TM1SubsetAll"i LPAREN dimension (DOT hierarchy)? RPAREN
+all_members_hierarchy_set:     dimension DOT hierarchy DOT "MEMBERS"i | dimension DOT "MEMBERS"i
+tm1_subset_to_set:             "TM1SubsetToSet"i LPAREN dimension (DOT hierarchy)? COMMA string RPAREN
+tm1_filter_by_pattern:         "TM1FilterByPattern"i LPAREN mdx_hierarchy_set COMMA string RPAREN
+tm1_filter_by_level:           "TM1FilterByLevel"i LPAREN mdx_hierarchy_set COMMA NUMERIC RPAREN
+children_hierarchy_set:        member DOT "Children"i
+except_hierarchy_set:          "Except"i LPAREN mdx_hierarchy_set COMMA mdx_hierarchy_set RPAREN
+union_hierarchy_set:           "UNION"i LPAREN mdx_hierarchy_set COMMA mdx_hierarchy_set RPAREN
+range_hierarchy_set:           LPAREN member COLUN member RPAREN | member COLUN member
+tm1_sort:                      "TM1Sort"i LPAREN mdx_hierarchy_set COMMA ("ASC"i|"DESC"i) RPAREN
+default_member_hierarchy_set:  member DOT "DEfaultMember"i
+order_by_cell_value_hierarchy_set: "ORDER"i LPAREN mdx_hierarchy_set COMMA cube_source DOT mdx_tuple (COMMA ("ASC"i|"BASC"i|"DESC"i)) RPAREN
+descendants_hierarchy_set:     "Descendants"i LPAREN (mdx_hierarchy_set|member) (COMMA (NUMERIC|mdx_level_expression))? RPAREN
+
+
+// mdx native function
+drill_down_member:             ("DRILLDOWNMEMBER"i LPAREN mdx_hierarchy_set COMMA mdx_hierarchy_set (COMMA RECURSIVE)? RPAREN)
+drill_up_member:               "DRILLUPMEMBER"i LPAREN mdx_hierarchy_set COMMA mdx_hierarchy_set (COMMA RECURSIVE)? RPAREN
+tm1_drill_down_member:         ("TM1DrillDownMember"i LPAREN mdx_hierarchy_set COMMA (mdx_hierarchy_set|ALL) (COMMA RECURSIVE)? RPAREN)
+
+//level_member_expression
+mdx_level_expression:          level_number_expression | level_name_expression | member_level_expression
+
+level_number_expression:       dimension (DOT hierarchy)? DOT "LEVELS"i LPAREN NUMERIC RPAREN
+level_name_expression:         dimension (DOT hierarchy)? DOT "LEVELS"i LPAREN string RPAREN
+member_level_expression:       member DOT "LEVEL"i
+
+
+
+%import common.WS
+%import common.NEWLINE
+%ignore NEWLINE
+%ignore WS
+%ignore /(\r?\n)+/

@@ -25,6 +25,12 @@ dependencies = [
   "tm1py >= 1.1"
 ]
 
+[project.optional-dependencies]
+mdx-advanced = [
+  "lark",
+  "mdxpy @ git+https://github.com/cubewise-code/mdxpy.git@9b8d38a0ee73941ee78fd75cfd3610ad156b473c",
+]
+
 [project.urls]
 Documentation = "https://github.com/airflow-provider-tm1/airflow-provider-tm1/blob/master/README.md"
 Repository = "https://github.com/airflow-provider-tm1/airflow-provider-tm1"
