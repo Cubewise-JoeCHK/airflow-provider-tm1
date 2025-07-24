@@ -4,7 +4,6 @@ import pandas as pd
 from airflow.exceptions import AirflowException
 from airflow.models import BaseOperator
 from airflow.sdk.definitions.context import Context
-from airflow.utils.decorators import apply_defaults
 from airflow.utils.operator_helpers import KeywordParameters
 from airflow.utils.context import context_merge
 
@@ -26,7 +25,6 @@ class TM1MDXChunkOperator(BaseOperator):
     ui_color = '#BDDDEF'
     ui_fgcolor = '#434b53'
     
-    @apply_defaults
     def __init__(
         self,
         mdx: str,
