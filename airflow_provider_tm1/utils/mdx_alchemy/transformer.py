@@ -238,6 +238,8 @@ class MDXTransformer(lark.Transformer):
 
     def elements_hierarchy_set(self, item):
         hierarchy_set = ElementsHierarchySet(*[i for i in item if isinstance(i, Member)])
+        if not hierarchy_set.members:
+            raise ValueError("The members list in hierarchy_set is empty. Cannot access the first member.")
         hierarchy_set.dimension = hierarchy_set.members[0].dimension
         hierarchy_set.hierarchy = hierarchy_set.members[0].hierarchy
         return hierarchy_set
