@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 mdx-advanced = [
   "lark",
-  "mdxpy @ git+https://github.com/cubewise-code/mdxpy.git",
+  "mdxpy @ git+https://github.com/cubewise-code/mdxpy.git@9b8d38a0ee73941ee78fd75cfd3610ad156b473c",
 ]
 
 [project.urls]
