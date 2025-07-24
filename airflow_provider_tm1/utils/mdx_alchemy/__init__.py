@@ -26,4 +26,4 @@ def mdx_to_mdx_builder(mdx: str) -> MdxBuilder:
     """
     parser = build_parser()
     mdx_tree = parser.parse(mdx)
-    return MDXTransformer().transform(mdx_tree)
+    return MDXTransformer().transform(mdx_tree).children[0]
