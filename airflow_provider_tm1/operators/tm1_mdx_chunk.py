@@ -23,6 +23,8 @@ class TM1MDXChunkOperator(BaseOperator):
     hook_name = 'tm1'
     default_conn_name = 'tm1_default'
     conn_type = 'tm1'
+    ui_color = '#BDDDEF'
+    ui_fgcolor = '#434b53'
     
     @apply_defaults
     def __init__(
