@@ -65,6 +65,7 @@ def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) ->
     # row axis 
     row_set = {}
     for row_dim_set in mdx_builder.axes.get(1, MdxAxis.empty()).dim_sets:
+        # Using to_mdx() for consistency with the column axis implementation.
         elements = tm1.elements.execute_set_mdx_element_names(row_dim_set.to_mdx())
         subset = AnonymousSubset(
             row_dim_set.dimension, 
