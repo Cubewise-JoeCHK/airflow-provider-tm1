@@ -127,7 +127,8 @@ class MDXTransformer(lark.Transformer):
     def mdx_hierarchy_set(self, item):
         for i in item:
             if isinstance(i, lark.Tree):
-                breakpoint()
+                # Log the presence of a lark.Tree instance for debugging purposes
+                print(f"Debug: Found lark.Tree instance in mdx_hierarchy_set with data: {i.data}")
         return [i for i in item if not isinstance(i, lark.Token)][0]
 
     def tm1_subset_to_set(self, item):
