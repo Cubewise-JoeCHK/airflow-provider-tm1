@@ -1,9 +1,42 @@
 from TM1py import TM1Service 
-from mdxpy.mdx import MdxBuilder, ElementsHierarchySet, Member
+from mdxpy.mdx import MdxBuilder, ElementsHierarchySet, Member, MdxAxis
 import math.prod, math.ceil
 from . import mdx_to_mdx_builder
 import copy 
+from TM1py.Objects import AnonymousSubset, ViewTitleSelection
 
+def build_mdx_statement(
+    title_set: dict[str, AnonymousSubset],
+    row_set: dict[str, AnonymousSubset],
+    col_set: dict[str, AnonymousSubset],
+    cube_name: str,
+):
+    """
+    Builds an MDX statement from the provided title, row, and column sets.
+
+    :param title_set: A dictionary of titles with dimension names as keys and AnonymousSubset as values.
+    :param row_set: A dictionary of row sets with dimension names as keys and AnonymousSubset as values.
+    :param col_set: A dictionary of column sets with dimension names as keys and AnonymousSubset as values.
+    :param cube_name: The name of the cube to query.
+    
+    :return: An MdxBuilder object representing the MDX statement.
+    """
+    mdx_builder = MdxBuilder(cube_name)
+    
+    for title in title_set.values():
+        mdx_builder.add_member_to_where(Member(title.dimension_name, title.hierarchy_name, title.elements[0])) 
+
+    for row_subset in row_set.values():
+        mdx_builder.add_hierarchy_set_to_row_axis(
+            ElementsHierarchySet(*[Member(row_subset.dimension_name, row_subset.hierarchy_name, e) for e in row_subset.elements])
+        )
+        
+    for col_subset in col_set.values():
+        mdx_builder.add_hierarchy_set_to_column_axis(
+            ElementsHierarchySet(*[Member(col_subset.dimension_name, col_subset.hierarchy_name, e) for e in col_subset.elements])
+        )
+
+    return mdx_builder
 
 def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) -> list[MdxBuilder]:
     """
@@ -30,67 +63,92 @@ def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) ->
 
     __mdx_builder_stat = {}
     # row axis 
-    for row_dim_set in mdx_builder.axes.get(1, []).dim_sets:
-        element_names = tm1.elements.execute_set_mdx(mdx=row_dim_set.to_mdx())
-        #todo: create better simple function to extract the dimension name and hierarchy name from set mdx
-        __mdx_builder_stat.update({row_dim_set.dimension_name: len(element_names)})
-        new_mdx_builder.add_hierarchy_set_to_row_axis(
-            ElementsHierarchySet(
-                *[Member(dimension=row_dim_set.dimension_name, hierarchy=row_dim_set.hierarchy_name, element=element_name) for element_name in element_names],
-            )
+    row_set = {}
+    for row_dim_set in mdx_builder.axes.get(1, MdxAxis.empty()).dim_sets:
+        elements = tm1.elements.execute_set_mdx_element_names(subset.expression)
+        subset = AnonymousSubset(
+            row_dim_set.dimension_name, 
+            row_dim_set.hierarchy_name,
+            elements=elements
         )
-    
+        __mdx_builder_stat.update({row_dim_set.dimension_name: len(elements)})
+        row_set.update({row_dim_set.dimension_name: subset})
+        
     # column axis 
-    for col_dim_set in mdx_builder.axes.get(0, []).dim_sets:
-        element_names = tm1.elements.execute_set_mdx(mdx=col_dim_set.to_mdx())
-        #todo: create better simple function to extract the dimension name and hierarchy name from set mdx
-        __mdx_builder_stat.update({col_dim_set.dimension_name: len(element_names)})
-        new_mdx_builder.add_hierarchy_set_to_column_axis(
-            ElementsHierarchySet(
-                *[Member(dimension=col_dim_set.dimension_name, hierarchy=col_dim_set.hierarchy_name, element=element_name) for element_name in element_names],
-            )
+    col_set = {}
+    for col_dim_set in mdx_builder.axes.get(0, MdxAxis.empty()).dim_sets:
+        element_names = tm1.elements.execute_set_mdx_element_names(col_dim_set.to_mdx())
+        subset = AnonymousSubset(
+            col_dim_set.dimension_name, 
+            col_dim_set.hierarchy_name,
+            elements=element_names
         )
+        __mdx_builder_stat.update({col_dim_set.dimension_name: len(element_names)})
+
+        col_set.update({col_dim_set.dimension_name: subset})
+        
+    title_set = {}
     for title in mdx_builder._where.members:
-        new_mdx_builder.add_member_to_where(title)
+        subset = AnonymousSubset(
+            title.dimension, 
+            title.hierarchy, 
+            elements=[title.element]
+        )
+        title_set.update({title.dimension: subset})
         
     if math.prod(__mdx_builder_stat.values()) <= chunk_size:
-        return [new_mdx_builder]
+        return [build_mdx_statement(title_set, row_set, col_set, mdx_builder.cube)]
     
-    chunk_size = math.ceil(__mdx_builder_stat[max(__mdx_builder_stat, key=__mdx_builder_stat.get)] / (math.prod(__mdx_builder_stat.values()) / chunk_size))
+    largest_dim = max(__mdx_builder_stat, key=__mdx_builder_stat.get) #type: ignore
     
-    chunk_mdx_builder = MdxBuilder(mdx_builder.cube)
-    for row_dim_set in new_mdx_builder.axes.get(1, []).dim_sets:
-        if row_dim_set.dimension_name == max(__mdx_builder_stat, key=__mdx_builder_stat.get):
+    batch = math.ceil(__mdx_builder_stat[largest_dim] / (math.prod(__mdx_builder_stat.values()) / chunk_size))
+    
+    unchanged_row_set = {}
+    unchanged_col_set = {}
+    chunk_row_set = []
+    chunk_col_set = []
+    for dim_name, subset in row_set.items():
+        if dim_name != largest_dim:
+            unchanged_row_set.update({dim_name: subset})
             continue 
-        chunk_mdx_builder.add_hierarchy_set_to_row_axis(row_dim_set)
-    
-    for col_dim_set in new_mdx_builder.axes.get(0, []).dim_sets:
-        if col_dim_set.dimension_name == max(__mdx_builder_stat, key=__mdx_builder_stat.get):
-            continue 
-        chunk_mdx_builder.add_hierarchy_set_to_column_axis(col_dim_set)
-    
-    for title in new_mdx_builder._where.members:
-        chunk_mdx_builder.add_member_to_where(title)
-    
+
+        for i in range(0, len(subset.elements), batch):
+            chunk_row_set.append(AnonymousSubset(
+                dim_name,
+                subset.hierarchy_name,
+                elements=subset.elements[i:i + batch]
+            ))
+        
+    for dim_name, subset in col_set.items():
+        if dim_name != largest_dim:
+            unchanged_col_set.update({dim_name: subset})
+            continue
+        
+        for i in range(0, len(subset.elements), chunk_size):
+            chunk_col_set.append(AnonymousSubset(
+                dim_name,
+                subset.hierarchy_name,
+                elements=subset.elements[i:i + chunk_size]
+            ))
+
     chunks = []
-    for row_dim_set in new_mdx_builder.axes.get(1, []).dim_sets:
-        if row_dim_set.dimension_name != max(__mdx_builder_stat, key=__mdx_builder_stat.get):
-            continue 
-        for i in range(0, __mdx_builder_stat[row_dim_set.dimension_name], chunk_size):
-            tmp_chunk_mdx_builder = copy.deepcopy(chunk_mdx_builder)
-            tmp_chunk_mdx_builder.add_hierarchy_set_to_row_axis(
-                ElementsHierarchySet(*row_dim_set.members[i:i + chunk_size])
+    for chunk in chunk_row_set:
+        chunks.append(
+            build_mdx_statement(
+                title_set=title_set,
+                row_set={**unchanged_row_set, chunk.dimension_name: chunk},
+                col_set=unchanged_col_set,
+                cube_name=mdx_builder.cube
             )
-            chunks.append(tmp_chunk_mdx_builder)
-            
-    for col_dim_set in new_mdx_builder.axes.get(0, []).dim_sets:
-        if col_dim_set.dimension_name != max(__mdx_builder_stat, key=__mdx_builder_stat.get):
-            continue 
-        for i in range(0, __mdx_builder_stat[col_dim_set.dimension_name], chunk_size):
-            tmp_chunk_mdx_builder = copy.deepcopy(chunk_mdx_builder)
-            tmp_chunk_mdx_builder.add_hierarchy_set_to_column_axis(
-                ElementsHierarchySet(*col_dim_set.members[i:i + chunk_size])
+        )
+    for chunk in chunk_col_set:
+        chunks.append(
+            build_mdx_statement(
+                title_set=title_set,
+                row_set=unchanged_row_set,
+                col_set={**unchanged_col_set, chunk.dimension_name: chunk},
+                cube_name=mdx_builder.cube
             )
-            chunks.append(tmp_chunk_mdx_builder)
+        )
 
     return chunks
