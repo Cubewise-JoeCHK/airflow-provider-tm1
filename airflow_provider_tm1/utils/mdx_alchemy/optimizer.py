@@ -1,6 +1,6 @@
 from TM1py import TM1Service 
 from mdxpy.mdx import MdxBuilder, ElementsHierarchySet, Member, MdxAxis
-import math.prod, math.ceil
+from math import prod, ceil
 from . import mdx_to_mdx_builder
 import copy 
 from TM1py.Objects import AnonymousSubset, ViewTitleSelection
