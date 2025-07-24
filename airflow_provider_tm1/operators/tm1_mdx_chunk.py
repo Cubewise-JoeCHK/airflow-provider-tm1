@@ -1,11 +1,8 @@
-from typing import Any, Callable, Collection, Mapping, Sequence
+from typing import Any
 
-import pandas as pd
-from airflow.exceptions import AirflowException
 from airflow.models import BaseOperator
 from airflow.sdk.definitions.context import Context
-from airflow.utils.operator_helpers import KeywordParameters
-from airflow.utils.context import context_merge
+from airflow.exceptions import AirflowException
 
 from airflow_provider_tm1.hooks.tm1 import TM1Hook
 
@@ -45,5 +42,10 @@ class TM1MDXChunkOperator(BaseOperator):
             self.log.info("Skipping chunk processing. Returning MDX query.")
             return [mdx_to_mdx_builder(self.mdx).to_mdx()]
         with hook.get_conn() as tm1:
-            return chunk_query(tm1, self.mdx, self.chunk_size)
-
+            try:
+                return chunk_query(tm1, self.mdx, self.chunk_size)
+            except Exception as e:
+                self.log.error("Error executing MDX query in chunks: %s", e)
+                raise AirflowException(f"Failed to execute MDX query in chunks: {e}")
+            finally:
+                self.log.info("MDX query executed successfully in chunks.")
