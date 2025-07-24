@@ -44,7 +44,7 @@ class MDXTransformer(lark.Transformer):
         return None
 
     def name(self, item):
-        return [i for i in item if isinstance(i, str) and i.type == 'IDENTIFIER'][0]
+        return [i for i in item if isinstance(i, lark.Token) and i.type == 'IDENTIFIER'][0]
 
     def dimension(self, item):
         return ('dimension', item[0].value)
