@@ -96,12 +96,12 @@ def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) ->
         )
         title_set.update({title.dimension: subset})
         
-    if math.prod(__mdx_builder_stat.values()) <= chunk_size:
+    if prod(__mdx_builder_stat.values()) <= chunk_size:
         return [build_mdx_statement(title_set, row_set, col_set, mdx_builder.cube)]
     
     largest_dim = max(__mdx_builder_stat, key=__mdx_builder_stat.get) #type: ignore
     
-    batch = math.ceil(__mdx_builder_stat[largest_dim] / (math.prod(__mdx_builder_stat.values()) / chunk_size))
+    batch = ceil(__mdx_builder_stat[largest_dim] / (prod(__mdx_builder_stat.values()) / chunk_size))
     
     unchanged_row_set = {}
     unchanged_col_set = {}
