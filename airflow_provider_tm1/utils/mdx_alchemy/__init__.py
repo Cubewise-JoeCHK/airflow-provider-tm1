@@ -26,4 +26,7 @@ def mdx_to_mdx_builder(mdx: str) -> MdxBuilder:
     """
     parser = build_parser()
     mdx_tree = parser.parse(mdx)
-    return MDXTransformer().transform(mdx_tree)
+    transformed = MDXTransformer().transform(mdx_tree)
+    if not transformed.children:
+        raise ValueError("Transformation resulted in an empty children list.")
+    return transformed.children[0]

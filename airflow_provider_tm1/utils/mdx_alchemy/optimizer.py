@@ -65,28 +65,29 @@ def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) ->
     # row axis 
     row_set = {}
     for row_dim_set in mdx_builder.axes.get(1, MdxAxis.empty()).dim_sets:
-        elements = tm1.elements.execute_set_mdx_element_names(row_dim_set.expression)
+        # Using to_mdx() for consistency with the column axis implementation.
+        elements = tm1.elements.execute_set_mdx_element_names(row_dim_set.to_mdx())
         subset = AnonymousSubset(
-            row_dim_set.dimension_name, 
-            row_dim_set.hierarchy_name,
+            row_dim_set.dimension, 
+            row_dim_set.hierarchy,
             elements=elements
         )
-        __mdx_builder_stat.update({row_dim_set.dimension_name: len(elements)})
-        row_set.update({row_dim_set.dimension_name: subset})
-        
+        __mdx_builder_stat.update({row_dim_set.dimension: len(elements)})
+        row_set.update({row_dim_set.dimension: subset})
+
     # column axis 
     col_set = {}
     for col_dim_set in mdx_builder.axes.get(0, MdxAxis.empty()).dim_sets:
         element_names = tm1.elements.execute_set_mdx_element_names(col_dim_set.to_mdx())
         subset = AnonymousSubset(
-            col_dim_set.dimension_name, 
-            col_dim_set.hierarchy_name,
+            col_dim_set.dimension, 
+            col_dim_set.hierarchy,
             elements=element_names
         )
-        __mdx_builder_stat.update({col_dim_set.dimension_name: len(element_names)})
+        __mdx_builder_stat.update({col_dim_set.dimension: len(element_names)})
 
-        col_set.update({col_dim_set.dimension_name: subset})
-        
+        col_set.update({col_dim_set.dimension: subset})
+
     title_set = {}
     for title in mdx_builder._where.members:
         subset = AnonymousSubset(
