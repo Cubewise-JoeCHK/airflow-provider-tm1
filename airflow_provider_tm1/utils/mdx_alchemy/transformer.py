@@ -16,7 +16,6 @@ from mdxpy.mdx import (
     ExceptHierarchySet,
     RangeHierarchySet,
     UnionHierarchySet,
-    Tm1DrillDownMemberSet,
     DefaultMemberHierarchySet,
     OrderByCellValueHierarchySet,
     DescendantsHierarchySet,
