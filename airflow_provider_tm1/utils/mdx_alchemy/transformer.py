@@ -30,7 +30,7 @@ class MDXTransformer(lark.Transformer):
     """
     This transformer is used to transform the parsed MDX query into an MdxBuilder object.
     
-    #! This transformer is expecting to transform the simple MDX query, if the query is complex, it will not work as expected. or error out. 
+    #! This transformer is expecting to transform the simple MDX query, if the query is complex, it will not work as expected, or may error out. 
     #! It is not a complete implementation of the MDX query language, but it is enough to handle the simple queries.
     """
 
