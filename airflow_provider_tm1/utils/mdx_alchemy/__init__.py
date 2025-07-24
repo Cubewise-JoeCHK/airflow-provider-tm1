@@ -1,7 +1,6 @@
 from lark import Lark
 import lark
 from importlib import resources
-from .parser import build_parser
 from .transformer import MDXTransformer
 from mdxpy.mdx import MdxBuilder
 
