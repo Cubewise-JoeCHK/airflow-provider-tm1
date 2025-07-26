@@ -1,6 +1,6 @@
 from typing import Any
 
-from airflow.models import BaseOperator
+from airflow.sdk.bases.operator import BaseOperator
 from airflow.sdk.definitions.context import Context
 from airflow.exceptions import AirflowException
 
