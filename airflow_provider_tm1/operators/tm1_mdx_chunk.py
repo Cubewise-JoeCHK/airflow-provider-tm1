@@ -40,7 +40,7 @@ class TM1MDXChunkOperator(BaseOperator):
         hook = TM1Hook(tm1_conn_id=self.tm1_conn_id)
         if self.skip_chunk_process:
             self.log.info("Skipping chunk processing. Returning MDX query.")
-            return [mdx_to_mdx_builder(self.mdx).to_mdx()]
+            return [self.mdx]
         with hook.get_conn() as tm1:
             try:
                 result = chunk_query(tm1, self.mdx, self.chunk_size)
