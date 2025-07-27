@@ -21,6 +21,9 @@ from mdxpy.mdx import (
     DescendantsHierarchySet,
     ElementsHierarchySet,
 )
+from mdxpy_plugin import (
+    DrillUpMemberSet
+)
 import lark
 
 parse_tuple_to_data = lambda x: {i[0]: i[1] for i in x if isinstance(i, tuple)}
@@ -164,7 +167,11 @@ class MDXTransformer(lark.Transformer):
         return Tm1FilterByPattern(item[1], wildcard=[i for i in item if isinstance(i, str)][0])
 
     def drill_up_member(self, item):
-        raise ValueError("drill up member is not supported by mdxpy")
+        data = [i for i in item if not isinstance(i, lark.Token)]
+        return DrillUpMemberSet(
+            underlying_hierarchy_set=data[0],
+            other_set=data[1],
+        )
 
     def children_hierarchy_set(self, item):
         assert isinstance(item[0], Member), 'the solution assumed the first elemetn of the list is Member'
