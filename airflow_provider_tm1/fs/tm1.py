@@ -92,8 +92,6 @@ class TM1BlobStorage(AbstractFileSystem):
         assert self._tm1, "TM1Service instance is not registered."
         
         log.debug(f"Listing files in path: {path}")
-        if not self._tm1:
-            raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
         if path == '/':
             return self._tm1.files.get_all_names()
         
