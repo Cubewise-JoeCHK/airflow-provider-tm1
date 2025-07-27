@@ -10,7 +10,7 @@ def build_mdx_statement(
     row_set: dict[str, AnonymousSubset],
     col_set: dict[str, AnonymousSubset],
     cube_name: str,
-):
+) -> str:
     """
     Builds an MDX statement from the provided title, row, and column sets.
 
@@ -36,9 +36,9 @@ def build_mdx_statement(
             ElementsHierarchySet(*[Member(col_subset.dimension_name, col_subset.hierarchy_name, e) for e in col_subset.elements])
         )
 
-    return mdx_builder
+    return mdx_builder.to_mdx()
 
-def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) -> list[MdxBuilder]:
+def chunk_query(tm1: TM1Service, mdx: str|MdxBuilder, chunk_size: int = 1000) -> list[str]:
     """
     #! This function is experimental and not fully implemented yet.
     #! It is intended to split the MDX query into smaller chunks based on the specified chunk size.
