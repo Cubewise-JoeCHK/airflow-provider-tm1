@@ -45,6 +45,12 @@ class TM1MDXChunkOperator(BaseOperator):
                 result = chunk_query(tm1, self.mdx, self.chunk_size)
                 self.log.info("MDX query executed successfully in chunks.")
                 return result
+            except ValueError as e:
+                self.log.error("ValueError while executing MDX query in chunks: %s", e)
+                raise AirflowException(f"ValueError occurred during MDX query execution: {e}")
+            except ConnectionError as e:
+                self.log.error("ConnectionError while executing MDX query in chunks: %s", e)
+                raise AirflowException(f"ConnectionError occurred during MDX query execution: {e}")
             except Exception as e:
-                self.log.error("Error executing MDX query in chunks: %s", e)
-                raise AirflowException(f"Failed to execute MDX query in chunks: {e}")
+                self.log.error("Unexpected error while executing MDX query in chunks: %s", e)
+                raise AirflowException(f"Unexpected error occurred during MDX query execution: {e}")
