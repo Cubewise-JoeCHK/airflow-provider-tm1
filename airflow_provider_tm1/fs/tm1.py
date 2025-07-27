@@ -98,7 +98,7 @@ class TM1BlobStorage(AbstractFileSystem):
             return self._tm1.files.get_all_names()
         
         refined_path = _refine_path_for_v11(path, self._tm1)
-        return self._tm1.files.get_all_names(refined_path) if not detail else [self.info(path) for path in self._tm1.files.get_all_names(refined_path)]
+        return self._tm1.files.get_all_names(refined_path) if not detail else [self.info(file_path) for file_path in self._tm1.files.get_all_names(refined_path)]
 
     def info(self, path, **kwargs):
         """Get information about a file in TM1."""
