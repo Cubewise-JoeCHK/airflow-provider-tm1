@@ -43,9 +43,9 @@ class TM1MDXChunkOperator(BaseOperator):
             return [mdx_to_mdx_builder(self.mdx).to_mdx()]
         with hook.get_conn() as tm1:
             try:
-                return chunk_query(tm1, self.mdx, self.chunk_size)
+                result = chunk_query(tm1, self.mdx, self.chunk_size)
+                self.log.info("MDX query executed successfully in chunks.")
+                return result
             except Exception as e:
                 self.log.error("Error executing MDX query in chunks: %s", e)
                 raise AirflowException(f"Failed to execute MDX query in chunks: {e}")
-            finally:
-                self.log.info("MDX query executed successfully in chunks.")
