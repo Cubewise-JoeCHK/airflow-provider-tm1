@@ -83,7 +83,7 @@ class TM1BlobStorage(AbstractFileSystem):
     def exists(self, path, **kwargs):
         """Check if a file exists in TM1."""
         assert self._tm1, "TM1Service instance is not registered."
-        refined_path = _refine_path_for_v11(path, self._tm1)
+        refined_path = self._refine_path(path)
         log.debug(f"Checking existence of path: {refined_path}")
         return self._tm1.files.exists(refined_path)
 
