@@ -115,8 +115,6 @@ class TM1BlobStorage(AbstractFileSystem):
         assert self._tm1, "TM1Service instance is not registered."
         log.debug(f"Opening file: {path} in mode: {mode}")
         refined_path = self._refine_path(path)
-        if not self._tm1:
-            raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
         if mode not in ['rb', 'wb']:
             raise ValueError("Mode must be 'rb' or 'wb'.")
 
