@@ -36,7 +36,6 @@ class TM1MDXChunkOperator(BaseOperator):
     
     def execute(self, context: Context): 
         from airflow_provider_tm1.utils.mdx_alchemy.optimizer import chunk_query
-        from airflow_provider_tm1.utils.mdx_alchemy import mdx_to_mdx_builder
         hook = TM1Hook(tm1_conn_id=self.tm1_conn_id)
         if self.skip_chunk_process:
             self.log.info("Skipping chunk processing. Returning MDX query.")
