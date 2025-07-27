@@ -106,8 +106,6 @@ class TM1BlobStorage(AbstractFileSystem):
         assert self._tm1, "TM1Service instance is not registered."
         refined_path = self._refine_path(path)
         log.debug(f"Getting info for path: {refined_path}")
-        if not self._tm1:
-            raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
         return {'name': refined_path, 'size': 0, 'type': 'file'}
     
     def open(self, path, mode='rb', **kwargs):
