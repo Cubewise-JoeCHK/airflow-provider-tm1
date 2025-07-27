@@ -131,7 +131,7 @@ class TM1BlobStorage(AbstractFileSystem):
     def _rm(self, path, **kwargs):
         """Remove a file in TM1."""
         assert self._tm1, "TM1Service instance is not registered."
-        refined_path = _refine_path_for_v11(path, self._tm1)
+        refined_path = self._refine_path(path)
         log.debug(f"Removing file: {refined_path}")
         if not self._tm1:
             raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
