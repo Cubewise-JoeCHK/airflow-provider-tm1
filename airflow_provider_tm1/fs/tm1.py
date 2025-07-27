@@ -97,7 +97,7 @@ class TM1BlobStorage(AbstractFileSystem):
         if path == '/':
             return self._tm1.files.get_all_names()
         
-        refined_path = _refine_path_for_v11(path, self._tm1)
+        refined_path = self._refine_path(path)
         names = self._tm1.files.get_all_names(refined_path)
         return names if not detail else [self.info(file_path) for file_path in names]
 
