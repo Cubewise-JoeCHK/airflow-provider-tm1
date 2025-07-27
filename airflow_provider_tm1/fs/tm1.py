@@ -63,7 +63,7 @@ class TM1BlobStorage(AbstractFileSystem):
             self._finalizer = None
             
     @staticmethod
-    def _cleanup_tm1_service(tm1_service):        
+    def _cleanup_tm1_service(tm1_service):
         try:
             if tm1_service and hasattr(tm1_service, 'logout'):
                 log.debug("Finalizer cleaning up TM1 service")
