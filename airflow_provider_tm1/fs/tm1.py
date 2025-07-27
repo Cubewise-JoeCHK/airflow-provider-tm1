@@ -1,4 +1,4 @@
-from fsspec import AbstractFileSystem 
+from fsspec import AbstractFileSystem
 from TM1py import TM1Service
 import io
 from airflow_provider_tm1.hooks.tm1 import TM1Hook 
@@ -9,6 +9,7 @@ from TM1py import TM1Service
 import io
 from TM1py.Utils.Utils import verify_version
 from TM1py.Services.FileService import FileService
+import weakref
 
 
 log = logging.getLogger(__name__)
@@ -18,7 +19,8 @@ def get_fs(conn_id: str | None = None, storage_options: dict | None = None) -> A
         conn_id = TM1Hook.default_conn_name
     tm1_hook = TM1Hook(tm1_conn_id=conn_id)
     tm1_service = tm1_hook.get_conn()
-    return TM1BlobStorage(tm1_service=tm1_service, **(storage_options or {}))
+    fs = TM1BlobStorage(tm1_service=tm1_service, owns_service=True, **(storage_options or {}))
+    return fs
 
 def _refine_path_for_v11(path: str, tm1_service: TM1Service) -> str:
     """Refine the path for TM1 version 11 and above."""
@@ -51,34 +53,66 @@ class TM1Blob(io.BytesIO):
 class TM1BlobStorage(AbstractFileSystem):
     """A file system for TM1 that allows interaction with TM1 objects as files."""
     protocol = ('tm1', )
-    def __init__(self, tm1_service: TM1Service, **kwargs):
+    def __init__(self, tm1_service: TM1Service, owns_service=False, **kwargs):
         super().__init__(**kwargs)
-        self._tm1 = tm1_service
+        self._tm1: TM1Service = tm1_service
+        self._owns_service = owns_service
+        if self._owns_service:
+            self._finalizer = weakref.finalize(self, self._cleanup_tm1_service, self._tm1)
+        else:
+            self._finalizer = None
+            
+    @staticmethod
+    def _cleanup_tm1_service(tm1_service):        
+        try:
+            if tm1_service and hasattr(tm1_service, 'logout'):
+                log.debug("Finalizer cleaning up TM1 service")
+                tm1_service.logout()
+        except Exception as e:
+            log.warning(f"Finalizer cleanup failed: {e}")
+    
+    def _refine_path(self, path: str) -> str:
+        """Central path refinement for all operations."""
+        return _refine_path_for_v11(path, self._tm1)
+    
+    def _strip_protocol(self, path):
+        """Override to apply path refinement at the protocol level."""
+        path = super()._strip_protocol(path)
+        return self._refine_path(path)
         
     def exists(self, path, **kwargs):
         """Check if a file exists in TM1."""
         assert self._tm1, "TM1Service instance is not registered."
         refined_path = _refine_path_for_v11(path, self._tm1)
-        log.info(f"Checking existence of path: {refined_path}")
+        log.debug(f"Checking existence of path: {refined_path}")
         return self._tm1.files.exists(refined_path)
 
-    def ls(self, path, **kwargs):
+    def ls(self, path, detail=True, **kwargs):
         """List files in a given TM1 path."""
         assert self._tm1, "TM1Service instance is not registered."
         
-        log.info(f"Listing files in path: {path}")
+        log.debug(f"Listing files in path: {path}")
         if not self._tm1:
             raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
         if path == '/':
             return self._tm1.files.get_all_names()
         
         refined_path = _refine_path_for_v11(path, self._tm1)
-        return self._tm1.files.get_all_names(refined_path)
+        return self._tm1.files.get_all_names(refined_path) if not detail else [self.info(path) for path in self._tm1.files.get_all_names(refined_path)]
 
+    def info(self, path, **kwargs):
+        """Get information about a file in TM1."""
+        assert self._tm1, "TM1Service instance is not registered."
+        refined_path = _refine_path_for_v11(path, self._tm1)
+        log.debug(f"Getting info for path: {refined_path}")
+        if not self._tm1:
+            raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
+        return {'name': refined_path, 'size': 0, 'type': 'file'}
+    
     def open(self, path, mode='rb', **kwargs):
         """Open a file in TM1."""
         assert self._tm1, "TM1Service instance is not registered."
-        log.info(f"Opening file: {path} in mode: {mode}")
+        log.debug(f"Opening file: {path} in mode: {mode}")
         refined_path = _refine_path_for_v11(path, self._tm1)
         if not self._tm1:
             raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
@@ -94,28 +128,11 @@ class TM1BlobStorage(AbstractFileSystem):
 
         return TM1Blob(data, self._tm1, refined_path, mode)
 
-    def rm(self, path, **kwargs):
+    def _rm(self, path, **kwargs):
         """Remove a file in TM1."""
         assert self._tm1, "TM1Service instance is not registered."
         refined_path = _refine_path_for_v11(path, self._tm1)
-        log.info(f"Removing file: {refined_path}")
+        log.debug(f"Removing file: {refined_path}")
         if not self._tm1:
             raise ValueError("TM1Service instance is not registered. Use register_tm1_service() to set it.")
         self._tm1.files.delete(refined_path)
-
-    def find(self, *name_contains, path: str = '.', name_contains_operator: str = 'and'):
-        """Find files in TM1 based on name_contains criteria."""
-        if not name_contains:
-            raise ValueError("At least one name_contains parameter is required.")
-        
-        assert self._tm1, "TM1Service instance is not registered."
-        refined_path = _refine_path_for_v11(path, self._tm1)
-        return self._tm1.files.search_string_in_name(name_contains=name_contains,
-                                              path=refined_path,
-                                              name_contains_operator=name_contains_operator)
-
-    def __del__(self):
-        """Ensure the TM1 service is properly closed when the file system is deleted."""
-        if self._tm1:
-            self._tm1.logout()
-            self._tm1 = None
