@@ -2,3 +2,5 @@ wheel
 build
 apache-airflow>=2.3
 TM1py>=2.1
+lark
+mdxpy @ git+https://github.com/cubewise-code/mdxpy.git@9b8d38a0ee73941ee78fd75cfd3610ad156b473c
