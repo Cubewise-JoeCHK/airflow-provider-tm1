@@ -20,10 +20,12 @@ from mdxpy.mdx import (
     OrderByCellValueHierarchySet,
     DescendantsHierarchySet,
     ElementsHierarchySet,
+    MdxPropertiesTuple,
 )
-from mdxpy_plugin import (
+from .mdxpy_plugin import (
     DrillUpMemberSet
 )
+
 import lark
 
 parse_tuple_to_data = lambda x: {i[0]: i[1] for i in x if isinstance(i, tuple)}
@@ -71,6 +73,7 @@ class MDXTransformer(lark.Transformer):
 
     def mdx_axis_row(self, item):
         mdx_axis = MdxAxis.empty()
+        property_tuple = None
         for node in item:
             if isinstance(node, lark.Tree):
                 if node.data == 'non_empty':
@@ -87,16 +90,21 @@ class MDXTransformer(lark.Transformer):
                 mdx_axis.add_set(TuplesSet([node]))
             if isinstance(node, MdxHierarchySet):
                 mdx_axis.add_set(node)
-        return ('row', mdx_axis)
+            if isinstance(node, MdxPropertiesTuple):
+                property_tuple = node
+        if property_tuple:
+            return {'row': mdx_axis, 'row_properties': property_tuple}
+        return {'row': mdx_axis}
 
     def where(self, item):
-        return ('where', [i for i in item if isinstance(i, MdxTuple)][0])
+        return {'where': [i for i in item if isinstance(i, MdxTuple)][0]}
 
     def cube_source(self, item):
-        return ('cube', item[0])
+        return {'cube': item[0]}
 
     def mdx_axis_column(self, item):
         mdx_axis = MdxAxis.empty()
+        property_tuple = None
         for node in item:
             if isinstance(node, lark.Tree):
                 if node.data == 'non_empty':
@@ -113,16 +121,30 @@ class MDXTransformer(lark.Transformer):
                 mdx_axis.add_tuple(node)
             if isinstance(node, MdxHierarchySet):
                 mdx_axis.add_set(node)
-        return ('column', mdx_axis)
+            if isinstance(node, MdxPropertiesTuple):
+                property_tuple = node
+        if property_tuple:
+            return {'column': mdx_axis, 'column_properties': property_tuple}
+        return {'column': mdx_axis}
+    
+    def dimension_properties(self, item):
+        return MdxPropertiesTuple(members=[i for i in item if isinstance(i, Member)])
 
     def mdx_builder(self, item):
-        data = {i[0]: i[1] for i in item if isinstance(i, tuple)}
+        data = {}
+        for i in item:
+            if isinstance(i, dict):
+                data.update(i)
         builder = MdxBuilder(cube=data['cube'],)
         axes = {}
         if row_data := data.get('row'):
-            axes.update({1: row_data})
+            axes.update({0: row_data})
         if column_data := data.get('column'):
-            axes.update({0: column_data})
+            axes.update({1: column_data})
+        if row_properties := data.get('row_properties'):
+            builder.axes_properties[0] = row_properties
+        if column_properties := data.get('column_properties'):
+            builder.axes_properties[1] = column_properties
         builder.axes = axes
         builder._where = where if (where := data.get('where')) else MdxTuple.empty()
         return builder

@@ -9,8 +9,8 @@ WHERE:                  "WHERE"
 NON:                    "NON"
 EMPTY:                  "EMPTY"
 ON:                     "ON"
-ROWS:                   "ROWS" | "1"
-COLUMNS:                "COLUMNS" | "0"
+ROWS:                   "ROWS" | "0"
+COLUMNS:                "COLUMNS" | "1"
 RECURSIVE:              "RECURSIVE"i
 ALL:                    "All"i
 
@@ -59,7 +59,7 @@ set_mdx_builder:        (mdx_set)
 mdx_axis_row:           non_empty? ( mdx_set ) (STAR ( mdx_set ) )* dimension_properties? ON (ROWS)
 mdx_axis_column:        non_empty? ( mdx_set ) (STAR ( mdx_set ) )* dimension_properties? ON (COLUMNS)
 where:                  WHERE LPAREN mdx_tuple RPAREN
-dimension_properties:   "DIMENSION"i "PROPERTIES"i "MEMBER_NAME"i | "PROPERTIES"i member
+dimension_properties:   "DIMENSION"i "PROPERTIES"i "MEMBER_NAME"i | "PROPERTIES"i member (COMMA member)*
 
 
 mdx_tuple:              LBRACE member (COMMA member)* RBRACE | member (COMMA member)* | LPAREN member (COMMA member)* RPAREN
