@@ -9,8 +9,8 @@ WHERE:                  "WHERE"
 NON:                    "NON"
 EMPTY:                  "EMPTY"
 ON:                     "ON"
-ROWS:                   "ROWS" | "0"
-COLUMNS:                "COLUMNS" | "1"
+ROWS:                   "ROWS" | "1"
+COLUMNS:                "COLUMNS" | "0"
 RECURSIVE:              "RECURSIVE"i
 ALL:                    "All"i
 

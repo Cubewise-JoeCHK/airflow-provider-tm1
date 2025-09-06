@@ -4,7 +4,6 @@ from flask_appbuilder.fieldwidgets import BS3TextFieldWidget
 from flask_babel import lazy_gettext
 from TM1py.Services import TM1Service
 from wtforms import StringField
-
 from airflow.exceptions import AirflowException
 from airflow.hooks.base import BaseHook
 
@@ -44,7 +43,14 @@ class TM1Hook(BaseHook):
         # authenticating in order to ping a public endpoint to see if it's down
         # I think this will die if these aren't provided (or will it just given empty strings)
         self.user: str = None if conn.login == "" else conn.login
-        self.password: str = "" if conn.get_password() is None else conn.get_password()
+        try:
+            self.password: str = "" if conn.get_password() is None else conn.get_password()
+        except AttributeError as e:
+            self.password = conn.password if conn.password else ""
+            pass 
+        except Exception as e:
+            raise AirflowException(f"Failed to retrieve password for connection {tm1_conn_id}: {str(e)}")
+        
         self.namespace: str = None if conn.schema == "" else conn.schema
 
         # is this the best way to acccess the connection?
@@ -60,7 +66,6 @@ class TM1Hook(BaseHook):
 
     def get_conn(self) -> TM1Service:
         """Function that creates a new TM1py Service object and returns it"""
-
         if not self.client:
             self.log.debug("Creating tm1 client for conn_id: %s", self.tm1_conn_id)
 
@@ -85,7 +90,6 @@ class TM1Hook(BaseHook):
                 raise AirflowException(f"Failed to create tm1 client, tm1 error: {str(tm1_error)}")
             except Exception as e:
                 raise AirflowException(f"Failed to create tm1 client, error: {str(e)}")
-
         return self.client
 
     def test_connection(self):
@@ -99,9 +103,6 @@ class TM1Hook(BaseHook):
             message = str(e)
 
         return status, message
-
-    def logout(self):
-        self.tm1.logout()
 
     def get_no_auth_url(self):
         """Return a URL based on the host and port"""

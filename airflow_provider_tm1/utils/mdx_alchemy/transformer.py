@@ -138,9 +138,9 @@ class MDXTransformer(lark.Transformer):
         builder = MdxBuilder(cube=data['cube'],)
         axes = {}
         if row_data := data.get('row'):
-            axes.update({0: row_data})
+            axes.update({1: row_data})
         if column_data := data.get('column'):
-            axes.update({1: column_data})
+            axes.update({0: column_data})
         if row_properties := data.get('row_properties'):
             builder.axes_properties[0] = row_properties
         if column_properties := data.get('column_properties'):
