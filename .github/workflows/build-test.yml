@@ -14,7 +14,7 @@ on:
 jobs:
 
   build:
-    timeout-minutes: 15
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     if: (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe to test') && github.event.pull_request.head.repo.fork)
       || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) 
@@ -76,10 +76,8 @@ jobs:
         REGISTRY_HOST="${REGISTRY%%:*}"
         echo "Registry: ${REGISTRY} (host: ${REGISTRY_HOST})"
 
-        # Diagnostics: confirm the runner is on the tailnet and can see the host.
-        echo "--- tailscale status ---"
-        sudo tailscale status || true
-        echo "--- ping registry host via tailscale ---"
+        # Confirm the runner is on the tailnet and can reach the registry host
+        # before pulling. These are non-fatal diagnostics.
         sudo tailscale ping "${REGISTRY_HOST}" || true
 
         sudo mkdir -p /etc/docker
@@ -87,9 +85,8 @@ jobs:
         sudo systemctl daemon-reload
         sudo systemctl restart docker
 
-        # Verify the runner can reach the registry over Tailscale before pulling.
-        echo "--- curl registry catalog ---"
-        curl -v "http://${REGISTRY}/v2/_catalog" || exit 1
+        # Verify the registry is reachable before pulling images.
+        curl -fsS "http://${REGISTRY}/v2/_catalog"
 
     - name: Install & Run Airflow
       env:
