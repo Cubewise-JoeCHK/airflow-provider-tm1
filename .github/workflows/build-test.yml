@@ -73,12 +73,23 @@ jobs:
         # The TM1 test image is served from a private HTTP registry on the tailnet.
         # Trust it as an insecure registry so docker compose can pull over plain HTTP.
         REGISTRY="${TM1_REGISTRY:-100.109.186.25:5100}"
+        REGISTRY_HOST="${REGISTRY%%:*}"
+        echo "Registry: ${REGISTRY} (host: ${REGISTRY_HOST})"
+
+        # Diagnostics: confirm the runner is on the tailnet and can see the host.
+        echo "--- tailscale status ---"
+        sudo tailscale status || true
+        echo "--- ping registry host via tailscale ---"
+        sudo tailscale ping "${REGISTRY_HOST}" || true
+
         sudo mkdir -p /etc/docker
         echo "{\"insecure-registries\": [\"${REGISTRY}\"]}" | sudo tee /etc/docker/daemon.json
         sudo systemctl daemon-reload
         sudo systemctl restart docker
+
         # Verify the runner can reach the registry over Tailscale before pulling.
-        curl -fsS "http://${REGISTRY}/v2/_catalog"
+        echo "--- curl registry catalog ---"
+        curl -v "http://${REGISTRY}/v2/_catalog" || exit 1
 
     - name: Install & Run Airflow
       env:
