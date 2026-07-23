@@ -290,7 +290,7 @@ services:
 
   tm1:
     container_name: tm1
-    image: knowledgeseed/tm1-docker:2.0.9.15-centos9
+    image: ${TM1_IMAGE:-100.109.186.25:5100/tm1-linux:24Retail}
     #environment:
     #  - DISPLAY=192.168.56.1:0.0
   
