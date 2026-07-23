@@ -5,8 +5,8 @@ from flask_babel import lazy_gettext
 from TM1py.Services import TM1Service
 from wtforms import StringField
 
+from airflow.providers.common.compat.sdk import BaseHook
 from airflow.exceptions import AirflowException
-from airflow.hooks.base import BaseHook
 
 
 class TM1Hook(BaseHook):
