@@ -58,13 +58,28 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt build
         python -m build
-    
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
+
+    - name: Connect to Tailscale
+      uses: tailscale/github-action@v3
       with:
-        username: ${{ secrets.DUSERNAME }}
-        password: ${{ secrets.DPASSWORD }}
-    
+        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        tags: tag:ci
+
+    - name: Configure Docker for private registry
+      env:
+        TM1_REGISTRY: ${{ vars.TM1_REGISTRY }}
+      run: |
+        # The TM1 test image is served from a private HTTP registry on the tailnet.
+        # Trust it as an insecure registry so docker compose can pull over plain HTTP.
+        REGISTRY="${TM1_REGISTRY:-100.109.186.25:5100}"
+        sudo mkdir -p /etc/docker
+        echo "{\"insecure-registries\": [\"${REGISTRY}\"]}" | sudo tee /etc/docker/daemon.json
+        sudo systemctl daemon-reload
+        sudo systemctl restart docker
+        # Verify the runner can reach the registry over Tailscale before pulling.
+        curl -fsS "http://${REGISTRY}/v2/_catalog"
+
     - name: Install & Run Airflow
       env:
         AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
