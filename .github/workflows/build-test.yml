@@ -112,6 +112,16 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build
 
+      - name: Pull Airflow base image (from Docker Hub, before tailnet)
+        env:
+          AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
+        run: |
+          # Pull the public Airflow image BEFORE connecting to Tailscale. Once the
+          # VPN is up, Docker Hub traffic can route through the tailnet (slow + NAT'd).
+          # Images persist on disk across the daemon restart below, so this pull
+          # survives the later insecure-registry reconfiguration.
+          docker pull "${AIRFLOW_BASE_IMAGE}"
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
         with:
@@ -135,6 +145,11 @@ jobs:
           echo "{\"insecure-registries\": [\"${REGISTRY}\"]}" | sudo tee /etc/docker/daemon.json
           sudo systemctl daemon-reload
           sudo systemctl restart docker
+
+          # confirm the Airflow image survived the daemon restart
+          docker image inspect "${{ matrix.base-image }}" >/dev/null \
+            && echo "Airflow image present after restart" \
+            || echo "::warning::Airflow image lost after docker restart"
 
           curl -fsS "http://${REGISTRY}/v2/_catalog"
 
