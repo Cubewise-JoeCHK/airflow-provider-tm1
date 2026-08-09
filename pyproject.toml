@@ -1,8 +1,5 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
-]
+requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,10 +16,14 @@ maintainers = [
 description = "A package to simplify connecting to the TM1 REST API from Apache Airflow"
 readme = "README.md"
 license = {file = "LICENSE"}
-requires-python = ">=3.7"
+requires-python = ">=3.11"
+# Runtime dependencies only. (Previously read from requirements.txt, which also
+# listed wheel/build -- those are dev tools and were wrongly shipped as runtime
+# deps in the built wheel.) uv resolves these + the dev groups below into uv.lock.
 dependencies = [
-  "apache-airflow >= 2.3",
-  "tm1py >= 1.1"
+  "apache-airflow>=2.11.0",
+  "apache-airflow-providers-common-compat>=1.16.0",
+  "TM1py>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -38,29 +39,45 @@ Issues = "https://github.com/airflow-provider-tm1/airflow-provider-tm1/issues"
 Changelog = "https://github.com/airflow-provider-tm1/airflow-provider-tm1/CHANGELOG.md"
 
 [tool.setuptools.packages]
-find = {namespaces = false} 
+find = {namespaces = false}
 
 [project.entry-points."apache_airflow_provider"]
 provider_info = "airflow_provider_tm1.__init__:get_provider_info"
 
+# Dev/build tooling, managed by uv via `uv sync` (PEP 735 dependency groups).
+# NOT shipped as runtime deps of the wheel. wheel + build are needed to build
+# the distribution; pytest for the integration suite; black/isort/pre-commit
+# for local development.
+[dependency-groups]
+dev = [
+  "build>=1.0",
+  "wheel>=0.40",
+  "pytest>=8.0",
+  "black==24.10.0",
+  "isort==5.13.2",
+  "pre-commit>=4.0",
+]
+
+# uv config: lock the full env (runtime + dev groups) for reproducible installs.
+# `uv sync` installs the project + dev group into .venv.
+[tool.uv]
+package = true
 
 [tool.black]
 line-length = 120
-target-version = ["py39"]
+target-version = ["py311", "py312"]
 include = '\.pyi?$'
-exclude = '''
-
-(
-  /(
-      \.eggs         # exclude a few common directories in the
-    | \.git          # root of the project
-    | \.mypy_cache
-    | _build
-    | buck-out
-    | build
-    | dist
-  )
-)
+extend-exclude = '''
+/(
+  \.eggs
+  | \.git
+  | \.mypy_cache
+  | _build
+  | buck-out
+  | build
+  | dist
+  | __pycache__
+)/
 '''
 
 [tool.isort]

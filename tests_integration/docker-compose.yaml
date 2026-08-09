@@ -24,7 +24,7 @@
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:2.9.1
+#                                Default: apache/airflow:2.11.0
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
@@ -50,7 +50,10 @@ x-airflow-common:
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   #image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:2.9.1}
-  build: ../.
+  build:
+    context: ../.
+    args:
+      AIRFLOW_BASE_IMAGE: ${AIRFLOW_BASE_IMAGE:-apache/airflow:2.11.0-python3.11}
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -287,18 +290,28 @@ services:
 
   tm1:
     container_name: tm1
-    image: knowledgeseed/tm1-docker:2.0.9.15-centos9
-    #environment:
-    #  - DISPLAY=192.168.56.1:0.0
-  
+    image: ${TM1_IMAGE:-100.109.186.25:5100/tm1-linux:24Retail}
+    # The TM1 entrypoint's restore-data.sh rewrites tm1s.cfg from these env
+    # vars (upsert_cfg HTTPPortNumber "$HTTP_PORT"). Without them, HTTP_PORT is
+    # empty and TM1 falls back to a non-deterministic port, so the 5360 the
+    # healthcheck + tm1_conn + host port mapping all expect is never opened.
+    environment:
+      - HTTP_PORT=5360
+      - SERVER_PORT=5001
+
     volumes:
       - ./tm1models:/docker-entrypoint-initdb.d/tm1models
       - ./cogstartup.xml:/docker-entrypoint-initdb.d/cogstartup.xml
     healthcheck:
-      test: "curl -f http://localhost:5360/api/v1/"
+      # Query an authenticated, model-dependent endpoint instead of the bare API
+      # root: /api/v1/ responds as soon as the HTTP server is up, but the 24Retail
+      # model (with the test .pro processes) is still loading. ServerName/$value
+      # returns the server name only once the model has finished loading, so this
+      # gate prevents the "process can not be found" race.
+      test: "curl -sf -u admin: http://localhost:5360/api/v1/Configuration/ServerName/$value | grep -q ."
       interval: 5s
       timeout: 2m
-      retries: 10
+      retries: 30
     ports:
       - 5898:5898
       - 5360:5360

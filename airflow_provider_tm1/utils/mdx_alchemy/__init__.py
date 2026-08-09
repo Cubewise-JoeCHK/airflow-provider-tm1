@@ -1,11 +1,13 @@
-from lark import Lark
-import lark
 from importlib import resources
-from .transformer import MDXTransformer
+
+import lark
+from lark import Lark
 from mdxpy.mdx import MdxBuilder
 
+from .transformer import MDXTransformer
+
 _PACKAGE_NAME: str = __package__ if __package__ else ""
-GRAMMAR_LARK = 'mdx.grammar.lark'
+GRAMMAR_LARK = "mdx.grammar.lark"
 
 
 def build_parser():
@@ -13,9 +15,12 @@ def build_parser():
     assert isinstance(GRAMMAR_LARK, str), "Grammar file name must be a string"
     # Use the modern importlib.resources.files API
     grammar_path = resources.files(_PACKAGE_NAME) / GRAMMAR_LARK
-    with grammar_path.open('r', encoding='utf-8') as f:
+    with grammar_path.open("r", encoding="utf-8") as f:
         grammar = f.read()
-    return Lark(grammar,)
+    return Lark(
+        grammar,
+    )
+
 
 def mdx_to_mdx_builder(mdx: str) -> MdxBuilder:
     """

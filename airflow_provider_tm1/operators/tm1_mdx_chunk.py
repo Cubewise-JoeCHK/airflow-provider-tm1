@@ -1,10 +1,11 @@
 from typing import Any
 
+from airflow.exceptions import AirflowException
 from airflow.sdk.bases.operator import BaseOperator
 from airflow.sdk.definitions.context import Context
-from airflow.exceptions import AirflowException
 
 from airflow_provider_tm1.hooks.tm1 import TM1Hook
+
 
 class TM1MDXChunkOperator(BaseOperator):
     """
@@ -15,27 +16,28 @@ class TM1MDXChunkOperator(BaseOperator):
     :param tm1_conn_id: The Airflow connection used for TM1 credentials.
     :param skip_chunk_process: If True, skips processing of chunks and only returns the MDX query.
     """
-    
-    default_conn_name = 'tm1_default'
-    ui_color = '#BDDDEF'
-    ui_fgcolor = '#434b53'
-    
+
+    default_conn_name = "tm1_default"
+    ui_color = "#BDDDEF"
+    ui_fgcolor = "#434b53"
+
     def __init__(
         self,
         mdx: str,
         chunk_size: int = 1000,
         tm1_conn_id: str = default_conn_name,
         skip_chunk_process: bool = False,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.mdx = mdx
         self.chunk_size = chunk_size
         self.tm1_conn_id = tm1_conn_id
         self.skip_chunk_process = skip_chunk_process
-    
-    def execute(self, context: Context): 
+
+    def execute(self, context: Context):
         from airflow_provider_tm1.utils.mdx_alchemy.optimizer import chunk_query
+
         hook = TM1Hook(tm1_conn_id=self.tm1_conn_id)
         if self.skip_chunk_process:
             self.log.info("Skipping chunk processing. Returning MDX query.")

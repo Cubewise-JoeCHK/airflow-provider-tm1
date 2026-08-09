@@ -1,11 +1,11 @@
 from typing import Any, Dict, Optional
 
+from airflow.exceptions import AirflowException
+from airflow.providers.common.compat.sdk import BaseHook
 from flask_appbuilder.fieldwidgets import BS3TextFieldWidget
 from flask_babel import lazy_gettext
 from TM1py.Services import TM1Service
 from wtforms import StringField
-from airflow.exceptions import AirflowException
-from airflow.hooks.base import BaseHook
 
 
 class TM1Hook(BaseHook):
@@ -42,15 +42,10 @@ class TM1Hook(BaseHook):
         # it might nice to be able to initialise and use the hook without
         # authenticating in order to ping a public endpoint to see if it's down
         # I think this will die if these aren't provided (or will it just given empty strings)
+        # NOTE: use the `password` attribute directly (not `get_password()`, which
+        # was removed in Airflow 3; the attribute exists in both 2.x and 3.x).
         self.user: str = None if conn.login == "" else conn.login
-        try:
-            self.password: str = "" if conn.get_password() is None else conn.get_password()
-        except AttributeError as e:
-            self.password = conn.password if conn.password else ""
-            pass 
-        except Exception as e:
-            raise AirflowException(f"Failed to retrieve password for connection {tm1_conn_id}: {str(e)}")
-        
+        self.password: str = "" if conn.password is None else conn.password
         self.namespace: str = None if conn.schema == "" else conn.schema
 
         # is this the best way to acccess the connection?
@@ -81,8 +76,9 @@ class TM1Hook(BaseHook):
                     password=self.password,
                     ssl=self.ssl,
                     namespace=self.namespace,
-                    session_context=self.session_context)
-                
+                    session_context=self.session_context,
+                )
+
                 self.server_name = self.client.server.get_server_name()
                 self.server_version = self.client.server.get_product_version()
 
@@ -123,15 +119,16 @@ class TM1Hook(BaseHook):
             "base_url": StringField(
                 lazy_gettext("BaseURL"),
                 widget=BS3TextFieldWidget(),
-                description=lazy_gettext("BaseURL encapsulates SSL, address and port for TM1 11 on-premise or address, instance, database for TM1 12"),
+                description=lazy_gettext(
+                    "BaseURL encapsulates SSL, address and port for TM1 11 on-premise or address, instance, database for TM1 12"
+                ),
             ),
         }
 
     @classmethod
     def get_ui_field_behaviour(cls) -> Dict[str, Any]:
         return {
-            "hidden_fields": [
-            ],
+            "hidden_fields": [],
             "relabeling": {
                 "host": "Address",
                 "schema": "Namespace",

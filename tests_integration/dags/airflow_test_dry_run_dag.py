@@ -16,7 +16,7 @@ default_args = {
 
 
 with DAG(
-    "airflow_test_timeout_dag",
+    "airflow_test_dry_run_dag",
     default_args=default_args,
     schedule=None,
     start_date=datetime(2025, 1, 1),
@@ -25,7 +25,7 @@ with DAG(
     max_active_runs=1,
 ) as dag:
     t1 = TM1RunTIOperator(
-        task_id="t1", tm1_conn_id="tm1_conn", process_name="airflow_test_timeout", timeout=3, cancel_at_timeout=True
+        task_id="t1", tm1_conn_id="tm1_conn", process_name="airflow_test_success", timeout=300, tm1_dry_run=True
     )
 
     t1

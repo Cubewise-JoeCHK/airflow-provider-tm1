@@ -1,4 +1,5 @@
-from mdxpy.mdx import MdxHierarchySet 
+from mdxpy.mdx import MdxHierarchySet
+
 
 class DrillUpMemberSet(MdxHierarchySet):
     """
@@ -6,11 +7,9 @@ class DrillUpMemberSet(MdxHierarchySet):
     This class extends MdxHierarchySet to provide functionality for
     handling drill-up operations in MDX queries.
     """
-    
-    def __init__(self, underlying_hierarchy_set: MdxHierarchySet, other_set: 'MdxHierarchySet'):
-        super(DrillUpMemberSet, self).__init__(
-            underlying_hierarchy_set.dimension,
-            underlying_hierarchy_set.hierarchy)
+
+    def __init__(self, underlying_hierarchy_set: MdxHierarchySet, other_set: "MdxHierarchySet"):
+        super(DrillUpMemberSet, self).__init__(underlying_hierarchy_set.dimension, underlying_hierarchy_set.hierarchy)
         self.underlying_hierarchy_set = underlying_hierarchy_set
         self.other_set = other_set
 
