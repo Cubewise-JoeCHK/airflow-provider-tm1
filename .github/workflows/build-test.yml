@@ -138,6 +138,31 @@ jobs:
 
           curl -fsS "http://${REGISTRY}/v2/_catalog"
 
+      - name: Resolve TM1 image ref
+        id: tm1-image
+        env:
+          TM1_REGISTRY: ${{ vars.TM1_REGISTRY }}
+        run: |
+          REGISTRY="${TM1_REGISTRY:-100.109.186.25:5100}"
+          IMAGE="${REGISTRY}/tm1-linux:24Retail"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          # cache key: stable unless the registry/tag changes. The image is large
+          # (~2.1GB) and rarely changes, so a registry+tag key maximizes hits.
+          echo "key=tm1-image-${REGISTRY//\//-}-24Retail" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TM1 image from cache
+        id: tm1-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/tm1-image.tar
+          key: ${{ steps.tm1-image.outputs.key }}
+
+      - name: Load cached TM1 image (if present)
+        if: steps.tm1-cache.outputs.cache-hit == 'true'
+        run: |
+          echo "Cache HIT — loading TM1 image from tarball (skips the ~2.1GB tailnet pull) ..."
+          docker load --input /tmp/tm1-image.tar
+
       - name: Install & run Airflow stack
         env:
           AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
@@ -148,6 +173,23 @@ jobs:
           echo -e "AIRFLOW_BASE_IMAGE=${AIRFLOW_BASE_IMAGE}" >> .env
           docker compose up -d airflow-init
           docker compose up -d --build
+
+      - name: Save TM1 image to cache (on cache miss)
+        if: always() && steps.tm1-cache.outputs.cache-hit != 'true'
+        env:
+          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
+        run: |
+          # Only runs the first time (or when the image tag changes). The compose up
+          # above already pulled the image; save it so future runs skip the slow
+          # tailnet pull. Runs with always() so a cache is still seeded even if a
+          # downstream step failed — as long as the image itself was pulled.
+          if ! docker image inspect "${TM1_IMAGE}" >/dev/null 2>&1; then
+            echo "Image not present locally — nothing to cache."
+            exit 0
+          fi
+          echo "Cache MISS — saving TM1 image for next run ..."
+          docker save --output /tmp/tm1-image.tar "${TM1_IMAGE}"
+          ls -lh /tmp/tm1-image.tar
 
       - name: Wait for TM1 to be ready
         run: |
