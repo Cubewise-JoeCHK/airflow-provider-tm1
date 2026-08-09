@@ -25,7 +25,6 @@ from airflow_provider_tm1.fs import (
 )
 from airflow_provider_tm1.fs.tm1 import _normalize_path
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
