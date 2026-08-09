@@ -25,12 +25,15 @@ default_args = {
 @task(task_id="write_tm1_file")
 def write_tm1_file(**context):
     """Write a file to TM1 using the native Object Storage API."""
-    test_file = ObjectStoragePath("tm1://test_file.txt", conn_id=CONN_ID)
+    # Path format: tm1://<conn_id>@/<path> — the conn_id is the netloc "user",
+    # the file path is after the /. Using tm1://test_file.txt (without @/) would
+    # parse 'test_file.txt' as the host, leaving an empty path.
+    test_file = ObjectStoragePath(f"tm1://{CONN_ID}@/test_file.txt")
     test_file.write_bytes(b"This is a sample output file written to TM1.")
     print("✅ Sample output file written to TM1")
 
     # text mode + stat/size/is_file now work natively
-    text_file = ObjectStoragePath("tm1://test_file.txt", conn_id=CONN_ID)
+    text_file = ObjectStoragePath(f"tm1://{CONN_ID}@/test_file.txt")
     text_file.write_text("Hello TM1, from ObjectStoragePath!")
     st = text_file.stat()
     print(f"✅ stat: size={text_file.size()} bytes, is_file={text_file.is_file()}")
@@ -50,8 +53,8 @@ def read_tm1_file(path: str, **context):
 @task(task_id="copy_and_search")
 def copy_and_search(**context):
     """Copy a file and use the TM1-specific name search."""
-    src = ObjectStoragePath("tm1://test_file.txt", conn_id=CONN_ID)
-    dst = ObjectStoragePath("tm1://test_file_copy.txt", conn_id=CONN_ID)
+    src = ObjectStoragePath(f"tm1://{CONN_ID}@/test_file.txt")
+    dst = ObjectStoragePath(f"tm1://{CONN_ID}@/test_file_copy.txt")
     src.copy(dst)
     print(f"✅ Copied {src} -> {dst}")
 
