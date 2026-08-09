@@ -61,8 +61,10 @@ jobs:
         run: uv run pytest tests/unit -q
 
   # ---------------------------------------------------------------------------
-  # Integration tests: the full TM1 + Airflow docker-compose stack.
-  # Requires the private tailnet TM1 image, so it's secrets-gated.
+  # Integration tests: the Airflow stack + an EXTERNAL persistent TM1 instance.
+  # TM1 runs as a long-lived container on the lab box (airflow-provider-ci)
+  # reachable over the tailnet via Caddy, so CI no longer pulls/starts its own
+  # 2.1GB TM1 image. This makes the job minutes faster and fully deterministic.
   # ---------------------------------------------------------------------------
   integration:
     name: Integration (${{ matrix.display-name }})
@@ -73,7 +75,7 @@ jobs:
       || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
       || github.event_name == 'push'
       || github.event_name == 'workflow_dispatch'
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -112,16 +114,6 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build
 
-      - name: Pull Airflow base image (from Docker Hub, before tailnet)
-        env:
-          AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
-        run: |
-          # Pull the public Airflow image BEFORE connecting to Tailscale. Once the
-          # VPN is up, Docker Hub traffic can route through the tailnet (slow + NAT'd).
-          # Images persist on disk across the daemon restart below, so this pull
-          # survives the later insecure-registry reconfiguration.
-          docker pull "${AIRFLOW_BASE_IMAGE}"
-
       - name: Connect to Tailscale
         uses: tailscale/github-action@v3
         with:
@@ -129,151 +121,49 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
-      - name: Configure Docker for private registry
+      - name: Verify the persistent TM1 CI instance is reachable
         env:
-          TM1_REGISTRY: ${{ vars.TM1_REGISTRY }}
+          TM1_HOST: airflow-provider-ci.joechowhk.internal
         run: |
-          # The TM1 test image is served from a private HTTP registry on the tailnet.
-          # Trust it as an insecure registry so docker compose can pull over plain HTTP.
-          REGISTRY="${TM1_REGISTRY:-100.109.186.25:5100}"
-          REGISTRY_HOST="${REGISTRY%%:*}"
-          echo "Registry: ${REGISTRY} (host: ${REGISTRY_HOST})"
+          # The TM1 CI instance is a long-lived container on the lab box, proxied
+          # by Caddy at this tailnet hostname. Poll until its model is loaded.
+          echo "Probing TM1 at http://${TM1_HOST}/ ..."
+          deadline=$(( $(date +%s) + 120 ))
+          while :; do
+            if name=$(curl -sf -u admin: "http://${TM1_HOST}/api/v1/Configuration/ServerName/\$value" 2>/dev/null) && [ -n "$name" ]; then
+              echo "✅ TM1 reachable. ServerName: ${name}"
+              exit 0
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Could not reach TM1 at ${TM1_HOST} within 2 minutes."
+              exit 1
+            fi
+            printf '.'; sleep 3
+          done
 
-          sudo tailscale ping "${REGISTRY_HOST}" || true
-
-          sudo mkdir -p /etc/docker
-          echo "{\"insecure-registries\": [\"${REGISTRY}\"]}" | sudo tee /etc/docker/daemon.json
-          sudo systemctl daemon-reload
-          sudo systemctl restart docker
-
-          # confirm the Airflow image survived the daemon restart
-          docker image inspect "${{ matrix.base-image }}" >/dev/null \
-            && echo "Airflow image present after restart" \
-            || echo "::warning::Airflow image lost after docker restart"
-
-          curl -fsS "http://${REGISTRY}/v2/_catalog"
-
-      - name: Resolve TM1 image ref
-        id: tm1-image
-        env:
-          TM1_REGISTRY: ${{ vars.TM1_REGISTRY }}
-        run: |
-          REGISTRY="${TM1_REGISTRY:-100.109.186.25:5100}"
-          IMAGE="${REGISTRY}/tm1-linux:24Retail"
-          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-          # cache key: stable unless the registry/tag changes. The image is large
-          # (~2.1GB) and rarely changes, so a registry+tag key maximizes hits.
-          echo "key=tm1-image-${REGISTRY//\//-}-24Retail" >> "$GITHUB_OUTPUT"
-
-      - name: Restore TM1 image from cache
-        id: tm1-cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/tm1-image.tar
-          key: ${{ steps.tm1-image.outputs.key }}
-
-      - name: Load cached TM1 image (if present)
-        if: steps.tm1-cache.outputs.cache-hit == 'true'
-        run: |
-          echo "Cache HIT — loading TM1 image from tarball (skips the ~2.1GB tailnet pull) ..."
-          docker load --input /tmp/tm1-image.tar
-
-      # --- Airflow stack + TM1 pull run concurrently (different bottlenecks) ---
-      # Airflow image build is CPU-bound; the TM1 pull is network-bound. Decoupling
-      # them lets the two overlap on a cache miss instead of the slow TM1 pull
-      # serializing behind the entire compose up.
-
-      - name: Start TM1 image pull in background (cache miss only)
-        if: steps.tm1-cache.outputs.cache-hit != 'true'
-        env:
-          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
-        run: |
-          # Pull the 2.1GB TM1 image from the tailnet registry in the background so
-          # the Airflow stack build (next step) proceeds in parallel. The PID is
-          # stored so we can wait for completion before 'docker compose up tm1'.
-          echo "Cache MISS — pulling TM1 image in background ..."
-          nohup docker pull "${TM1_IMAGE}" > /tmp/tm1-pull.log 2>&1 &
-          echo $! > /tmp/tm1-pull.pid
-          echo "TM1 pull started as PID $(cat /tmp/tm1-pull.pid)"
-
-      - name: Build & start Airflow stack (excludes TM1)
+      - name: Build & start Airflow stack (no TM1 container)
         env:
           AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
+          TM1_HOST: airflow-provider-ci.joechowhk.internal
         run: |
           cd tests_integration
           echo -e "AIRFLOW_UID=$(id -u)" > .env
           echo -e "AIRFLOW_BASE_IMAGE=${AIRFLOW_BASE_IMAGE}" >> .env
-          # Build the custom Airflow image + run airflow-init (DB migration), then
-          # start the Airflow services that DON'T depend on TM1 (webserver,
-          # scheduler, worker, triggerer, redis, postgres). TM1 is started separately
-          # below once its image is ready, so its slow pull never blocks this build.
           docker compose up -d airflow-init
+          # Start only Airflow services — TM1 is external (no tm1 service here).
           docker compose up -d --build airflow-webserver airflow-scheduler airflow-worker airflow-triggerer
 
-      - name: Wait for TM1 pull (cache miss) and start TM1
+      - name: Add TM1 connection to Airflow (external instance)
         env:
-          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
-        run: |
-          if [ -f /tmp/tm1-pull.pid ]; then
-            PID=$(cat /tmp/tm1-pull.pid)
-            echo "Waiting for background TM1 pull (PID $PID) to finish ..."
-            tail --pid="$PID" -f /dev/null
-            if ! wait "$PID"; then
-              echo "::error::TM1 image pull failed. Pull log:"
-              cat /tmp/tm1-pull.log
-              exit 1
-            fi
-            echo "TM1 image pull complete."
-          else
-            echo "TM1 image was loaded from cache (no background pull)."
-          fi
-          docker image inspect "${TM1_IMAGE}" >/dev/null \
-            || { echo "::error::TM1 image not present after pull/cache"; exit 1; }
-          cd tests_integration
-          docker compose up -d --no-deps tm1
-
-      - name: Save TM1 image to cache (on cache miss)
-        if: always() && steps.tm1-cache.outputs.cache-hit != 'true'
-        env:
-          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
-        run: |
-          # Only runs the first time (or when the image tag changes). Runs with
-          # always() so a cache is still seeded even if a downstream step failed —
-          # as long as the image itself was pulled.
-          if ! docker image inspect "${TM1_IMAGE}" >/dev/null 2>&1; then
-            echo "Image not present locally — nothing to cache."
-            exit 0
-          fi
-          echo "Cache MISS — saving TM1 image for next run ..."
-          docker save --output /tmp/tm1-image.tar "${TM1_IMAGE}"
-          ls -lh /tmp/tm1-image.tar
-
-      - name: Wait for TM1 to be ready
-        run: |
-          echo "Waiting for TM1 model to finish loading (cold boot can take minutes) ..."
-          TM1_CONTAINER="tm1"
-          deadline=$(( $(date +%s) + 900 ))   # 15 min cap
-          while :; do
-            status="$(docker inspect --format '{{.State.Health.Status}}' "$TM1_CONTAINER" 2>/dev/null || echo "missing")"
-            case "$status" in
-              healthy) echo "TM1 is healthy (model loaded)."; exit 0 ;;
-              unhealthy) echo "::error::TM1 container is unhealthy. Check: docker logs $TM1_CONTAINER"; exit 1 ;;
-              missing) echo "::error::TM1 container $TM1_CONTAINER not found."; exit 1 ;;
-            esac
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::Timed out waiting for TM1 health (last status: $status)."
-              exit 1
-            fi
-            printf '.'
-            sleep 5
-          done
-
-      - name: Add TM1 connection to Airflow
+          TM1_HOST: airflow-provider-ci.joechowhk.internal
         run: |
           DOCKID=$(docker ps -q --filter "name=tests_integration-airflow-worker-1")
-          TM1_CONN=$(docker exec $DOCKID airflow connections list 2>/dev/null | grep tm1_conn) || true
+          TM1_CONN=$(docker exec "$DOCKID" airflow connections list 2>/dev/null | grep tm1_conn) || true
           if [ -z "$TM1_CONN" ]; then
-            docker exec $DOCKID airflow connections add 'tm1_conn' --conn-json '{"conn_type": "tm1", "host": "tm1", "login": "admin", "schema": "", "port": 5360, "extra": {"ssl": "False"}}'
+            # host = the tailnet hostname; port 80 (Caddy proxies to TM1's 12354)
+            docker exec "$DOCKID" airflow connections add 'tm1_conn' \
+              --conn-json '{"conn_type": "tm1", "host": "'"${TM1_HOST}"'", "login": "admin", "schema": "", "port": 80, "extra": {"ssl": "False"}}'
+            echo "Added tm1_conn -> http://${TM1_HOST}:80"
           else
             echo "Connection already added: $TM1_CONN"
           fi
@@ -291,8 +181,6 @@ jobs:
           name: integration-logs-airflow-${{ matrix.airflow-version }}
           path: |
             tests_integration/logs/*
-            tests_integration/tm1models/24Retail/tm1server.log
-            tests_integration/tm1models/24Retail/tm1processerror*.log
 
       - name: Stop docker containers
         if: always()
