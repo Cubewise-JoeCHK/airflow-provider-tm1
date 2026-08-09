@@ -178,26 +178,68 @@ jobs:
           echo "Cache HIT — loading TM1 image from tarball (skips the ~2.1GB tailnet pull) ..."
           docker load --input /tmp/tm1-image.tar
 
-      - name: Install & run Airflow stack
+      # --- Airflow stack + TM1 pull run concurrently (different bottlenecks) ---
+      # Airflow image build is CPU-bound; the TM1 pull is network-bound. Decoupling
+      # them lets the two overlap on a cache miss instead of the slow TM1 pull
+      # serializing behind the entire compose up.
+
+      - name: Start TM1 image pull in background (cache miss only)
+        if: steps.tm1-cache.outputs.cache-hit != 'true'
+        env:
+          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
+        run: |
+          # Pull the 2.1GB TM1 image from the tailnet registry in the background so
+          # the Airflow stack build (next step) proceeds in parallel. The PID is
+          # stored so we can wait for completion before 'docker compose up tm1'.
+          echo "Cache MISS — pulling TM1 image in background ..."
+          nohup docker pull "${TM1_IMAGE}" > /tmp/tm1-pull.log 2>&1 &
+          echo $! > /tmp/tm1-pull.pid
+          echo "TM1 pull started as PID $(cat /tmp/tm1-pull.pid)"
+
+      - name: Build & start Airflow stack (excludes TM1)
         env:
           AIRFLOW_BASE_IMAGE: ${{ matrix.base-image }}
         run: |
-          PYPACKAGE=$(ls dist | grep .whl)
           cd tests_integration
           echo -e "AIRFLOW_UID=$(id -u)" > .env
           echo -e "AIRFLOW_BASE_IMAGE=${AIRFLOW_BASE_IMAGE}" >> .env
+          # Build the custom Airflow image + run airflow-init (DB migration), then
+          # start the Airflow services that DON'T depend on TM1 (webserver,
+          # scheduler, worker, triggerer, redis, postgres). TM1 is started separately
+          # below once its image is ready, so its slow pull never blocks this build.
           docker compose up -d airflow-init
-          docker compose up -d --build
+          docker compose up -d --build airflow-webserver airflow-scheduler airflow-worker airflow-triggerer
+
+      - name: Wait for TM1 pull (cache miss) and start TM1
+        env:
+          TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
+        run: |
+          if [ -f /tmp/tm1-pull.pid ]; then
+            PID=$(cat /tmp/tm1-pull.pid)
+            echo "Waiting for background TM1 pull (PID $PID) to finish ..."
+            tail --pid="$PID" -f /dev/null
+            if ! wait "$PID"; then
+              echo "::error::TM1 image pull failed. Pull log:"
+              cat /tmp/tm1-pull.log
+              exit 1
+            fi
+            echo "TM1 image pull complete."
+          else
+            echo "TM1 image was loaded from cache (no background pull)."
+          fi
+          docker image inspect "${TM1_IMAGE}" >/dev/null \
+            || { echo "::error::TM1 image not present after pull/cache"; exit 1; }
+          cd tests_integration
+          docker compose up -d --no-deps tm1
 
       - name: Save TM1 image to cache (on cache miss)
         if: always() && steps.tm1-cache.outputs.cache-hit != 'true'
         env:
           TM1_IMAGE: ${{ steps.tm1-image.outputs.image }}
         run: |
-          # Only runs the first time (or when the image tag changes). The compose up
-          # above already pulled the image; save it so future runs skip the slow
-          # tailnet pull. Runs with always() so a cache is still seeded even if a
-          # downstream step failed — as long as the image itself was pulled.
+          # Only runs the first time (or when the image tag changes). Runs with
+          # always() so a cache is still seeded even if a downstream step failed —
+          # as long as the image itself was pulled.
           if ! docker image inspect "${TM1_IMAGE}" >/dev/null 2>&1; then
             echo "Image not present locally — nothing to cache."
             exit 0
